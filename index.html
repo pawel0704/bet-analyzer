@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#111">
+<title>Bet Analyzer Pro</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Arial,sans-serif;background:#f2f2f7;color:#111}
+h1{font-size:28px;margin:18px 0 3px}.sub{color:#666;margin-bottom:14px}
+.card{background:#fff;border-radius:18px;padding:16px;margin:12px 0;box-shadow:0 1px 4px #0001}
+h3{margin:0 0 10px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{font-size:12px;color:#666;display:block;margin:8px 0 5px}
+input,select{width:100%;padding:12px;border:1px solid #ddd;border-radius:11px;font-size:16px;background:#fff}
+button{border:0;border-radius:12px;padding:13px;width:100%;font-size:16px;font-weight:700;background:#111;color:#fff;margin-top:10px}
+button.secondary{background:#e5e5ea;color:#111}.row{display:flex;gap:8px}.row button{flex:1}
+.status{font-size:13px;color:#666;margin-top:9px}.error{color:#b00020}.ok{color:#177245}
+.event{border-top:1px solid #eee;padding:13px 0}.event:first-child{border-top:0}
+.eventtitle{font-weight:750;font-size:16px}.time{color:#777;font-size:12px;margin-top:3px}
+.tag{display:inline-block;background:#eee;border-radius:20px;padding:4px 8px;font-size:12px;margin:6px 4px 0 0}
+.evpos{color:#177245;font-weight:800}.evneg{color:#b00020}
+.small{font-size:12px;color:#777;line-height:1.45}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px 3px;border-bottom:1px solid #eee;text-align:left}
+details summary{font-weight:700;cursor:pointer}
+#scan{display:none}.hidden{display:none}
+</style>
+</head>
+<body>
+<h1>⚽ Bet Analyzer Pro</h1>
+<div class="sub">Automatyczne kursy + konsensus rynku + value/EV. Zoptymalizowany pod iPhone 14.</div>
+
+<div class="card">
+<h3>1. Połączenie z kursami</h3>
+<label>Klucz API — The Odds API</label>
+<input id="key" type="password" placeholder="Wklej swój API key">
+<div class="grid">
+<div><label>Region bukmacherów</label>
+<select id="region"><option value="eu">Europa (EU)</option><option value="uk">Wielka Brytania</option><option value="us">USA</option></select></div>
+<div><label>Rynek</label>
+<select id="market"><option value="h2h">1X2</option><option value="totals">Over / Under</option><option value="spreads">Handicap</option></select></div>
+</div>
+<label>Minimalne EV do pokazania (%)</label>
+<input id="minEV" type="number" inputmode="decimal" value="3" step="0.5">
+<div class="row">
+<button onclick="saveKey()">ZAPISZ KLUCZ</button>
+<button class="secondary" onclick="loadOdds()">POBIERZ MECZE</button>
+</div>
+<div id="status" class="status">Klucz jest przechowywany lokalnie w Safari.</div>
+</div>
+
+<div class="card">
+<h3>2. Liga</h3>
+<select id="sport">
+<option value="soccer_epl">Premier League</option>
+<option value="soccer_uefa_champs_league">Champions League</option>
+<option value="soccer_uefa_europa_league">Europa League</option>
+<option value="soccer_ger_bundesliga">Bundesliga</option>
+<option value="soccer_spain_la_liga">La Liga</option>
+<option value="soccer_italy_serie_a">Serie A</option>
+<option value="soccer_france_ligue_one">Ligue 1</option>
+<option value="soccer_netherlands_eredivisie">Eredivisie</option>
+<option value="soccer_portugal_primeira_liga">Primeira Liga</option>
+<option value="soccer_turkey_super_league">Super Lig</option>
+<option value="soccer_belgium_first_div">Belgian First Division</option>
+<option value="soccer_austria_bundesliga">Austrian Bundesliga</option>
+<option value="soccer_switzerland_superleague">Swiss Super League</option>
+</select>
+<button onclick="loadOdds()">🔎 SKANUJ VALUE BETY</button>
+</div>
+
+<div id="scan" class="card">
+<h3>Wyniki skanera</h3>
+<div class="small">Model rynku usuwa marżę bukmacherską i porównuje ją z najlepszym dostępnym kursem. To wskaźnik matematyczny, nie gwarancja wyniku.</div>
+<div id="results"></div>
+</div>
+
+<div class="card">
+<details>
+<summary>⚙️ Ustawienia bankrolla</summary>
+<div class="grid">
+<div><label>Bankroll (zł)</label><input id="bank" type="number" value="1000"></div>
+<div><label>Ułamek Kelly</label><input id="kelly" type="number" value="25" step="5"></div>
+</div>
+<div class="small">Stawka wyliczana jest jako część pełnego Kelly. Jest to informacja matematyczna, nie rekomendacja obstawiania.</div>
+</details>
+</div>
+
+<div class="card">
+<h3>Historia</h3>
+<div id="history" class="small">Brak.</div>
+<button class="secondary" onclick="clearHistory()">WYCZYŚĆ</button>
+</div>
+
+<div class="card small">
+<b>Źródło danych:</b> The Odds API. Aktualne API v4 udostępnia mecze i kursy wielu bukmacherów, a dla piłki nożnej obsługuje m.in. 1X2, handicap i totals. W aplikacji klucz API jest wpisywany przez użytkownika i zapisany wyłącznie lokalnie na urządzeniu.
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+function saveKey(){localStorage.setItem('oddsKey',$('key').value.trim()); $('status').textContent='Klucz zapisany lokalnie.'; $('status').className='status ok';}
+function init(){let k=localStorage.getItem('oddsKey');if(k)$('key').value=k;renderHistory()}
+init();
+
+function pct(x){return (x*100).toFixed(1)+'%'}
+function money(x){return Number(x).toFixed(2)+' zł'}
+
+function noVig(outcomes){
+  let inv=outcomes.map(o=>1/o.price), s=inv.reduce((a,b)=>a+b,0);
+  return outcomes.map((o,i)=>({...o,p:inv[i]/s}));
+}
+
+function bestOdds(data){
+  const map={};
+  for(const b of (data.bookmakers||[])){
+    for(const m of (b.markets||[])){
+      for(const o of (m.outcomes||[])){
+        const key=o.name+'|'+(o.point??'');
+        if(!map[key] || o.price>map[key].price) map[key]={name:o.name,price:o.price,point:o.point,book:b.title,link:o.link||b.url||''};
+      }
+    }
+  }
+  return Object.values(map);
+}
+
+function marketConsensus(data){
+  // Consensus is built from the median implied probability across bookmaker offers
+  // for each outcome/line, then normalized to remove overround.
+  const groups={};
+  for(const b of (data.bookmakers||[])){
+    for(const m of (b.markets||[])){
+      for(const o of (m.outcomes||[])){
+        const k=o.name+'|'+(o.point??'');
+        (groups[k]??=[]).push(1/o.price);
+      }
+    }
+  }
+  const raw=Object.entries(groups).map(([k,arr])=>{
+    const a=[...arr].sort((x,y)=>x-y), med=a[Math.floor(a.length/2)];
+    const [name,point]=k.split('|');
+    return {name,point:point===''?undefined:Number(point),raw:med};
+  });
+  let sum=raw.reduce((s,x)=>s+x.raw,0);
+  return raw.map(x=>({...x,p:x.raw/sum}));
+}
+
+function normalizeOutcomeName(name){
+  return name.toLowerCase().replace(/\s+/g,' ').trim();
+}
+
+async function loadOdds(){
+  const key=$('key').value.trim()||localStorage.getItem('oddsKey');
+  if(!key){$('status').innerHTML='<span class="error">Najpierw wklej API key.</span>';return}
+  saveKey();
+  const sport=$('sport').value, region=$('region').value, market=$('market').value;
+  $('status').textContent='Pobieram aktualne mecze i kursy…';
+  $('scan').style.display='block'; $('results').innerHTML='Ładowanie…';
+  try{
+    const url=`https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sport)}/odds?regions=${region}&markets=${market}&oddsFormat=decimal&apiKey=${encodeURIComponent(key)}`;
+    const r=await fetch(url);
+    const remaining=r.headers.get('x-requests-remaining');
+    const used=r.headers.get('x-requests-used');
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.message||('HTTP '+r.status));
+    $('status').innerHTML='<span class="ok">Pobrano '+data.length+' meczów.</span> '+(remaining?`Pozostało zapytań: ${remaining}.`:'');
+    renderResults(data);
+  }catch(e){
+    $('results').innerHTML='<div class="error"><b>Błąd:</b> '+escapeHtml(e.message)+'</div><p class="small">Sprawdź klucz API, internet i wybraną ligę.</p>';
+    $('status').textContent='Nie udało się pobrać danych.';
+  }
+}
+
+function renderResults(events){
+  const minEV=parseFloat($('minEV').value||0)/100;
+  let rows=[];
+  for(const ev of events){
+    const consensus=marketConsensus(ev);
+    const best=bestOdds(ev);
+    for(const c of consensus){
+      const match=best.find(x=>normalizeOutcomeName(x.name)===normalizeOutcomeName(c.name) && String(x.point??'')===String(c.point??''));
+      if(!match)continue;
+      const value=c.p*match.price-1;
+      if(value>=minEV) rows.push({ev, c, match, value});
+    }
+  }
+  rows.sort((a,b)=>b.value-a.value);
+  if(!rows.length){$('results').innerHTML='<p>Brak ofert spełniających ustawiony próg EV. Spróbuj np. 0–3% lub inną ligę/rynek.</p>';return}
+  $('results').innerHTML=rows.slice(0,50).map((x,i)=>{
+    const d=new Date(x.ev.commence_time);
+    const date=d.toLocaleString('pl-PL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const bank=parseFloat($('bank').value)||0, frac=(parseFloat($('kelly').value)||25)/100;
+    const kelly=((x.c.p*x.match.price-1)/(x.match.price-1))*frac;
+    const stake=Math.max(0,bank*kelly);
+    const point=x.match.point!==undefined?` ${x.match.point>0?'+':''}${x.match.point}`:'';
+    const item=`<div class="event">
+      <div class="eventtitle">${escapeHtml(x.ev.home_team)} – ${escapeHtml(x.ev.away_team)}</div>
+      <div class="time">${date} · ${escapeHtml(x.ev.sport_title||'')}</div>
+      <span class="tag">${escapeHtml(x.c.name)}${point}</span>
+      <span class="tag">kurs <b>${x.match.price.toFixed(2)}</b></span>
+      <span class="tag">model ${pct(x.c.p)}</span>
+      <span class="tag evpos">EV +${(x.value*100).toFixed(1)}%</span>
+      <div class="small">Najlepszy kurs: ${escapeHtml(x.match.book)} · orientacyjna stawka ${money(stake)} przy bankrollu ${money(bank)} i ${parseFloat($('kelly').value)||25}% Kelly.</div>
+      <button class="secondary" onclick='savePick(${JSON.stringify({home:x.ev.home_team,away:x.ev.away_team,market:x.c.name,point:x.match.point??null,odds:x.match.price,prob:x.c.p,ev:x.value,book:x.match.book})})'>ZAPISZ DO HISTORII</button>
+    </div>`;
+    return item;
+  }).join('');
+}
+
+function savePick(x){
+ let h=JSON.parse(localStorage.getItem('picks')||'[]');
+ h.unshift({...x,date:new Date().toLocaleString('pl-PL')}); h=h.slice(0,100);
+ localStorage.setItem('picks',JSON.stringify(h)); renderHistory();
+}
+function renderHistory(){
+ let h=JSON.parse(localStorage.getItem('picks')||'[]');
+ $('history').innerHTML=h.length?h.map(x=>`<p><b>${escapeHtml(x.home)} – ${escapeHtml(x.away)}</b><br>${escapeHtml(x.market)} · ${x.odds.toFixed(2)} · EV <span class="evpos">+${(x.ev*100).toFixed(1)}%</span> · ${escapeHtml(x.book)}<br>${x.date}</p>`).join(''):'Brak.';
+}
+function clearHistory(){localStorage.removeItem('picks');renderHistory()}
+function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+</script>
+</body>
+</html>
